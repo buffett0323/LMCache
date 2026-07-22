@@ -158,9 +158,11 @@ class NixlStorageAgent:
         Args:
             device: Device type of the L1 memory buffer (e.g. "cpu", "cuda").
             backend: Nixl storage backend to use. One of: GDS, GDS_MT, POSIX,
-                HF3FS (file-based) or OBJ, AZURE_BLOB (object-based).
+                HF3FS (file-based), OBJ, AZURE_BLOB (object-based), or GUSLI
+                (userspace block device, e.g. SPDK-bdev NVMe).
             backend_params: Backend-specific parameters. File-based backends
-                require "file_path" and "use_direct_io" keys.
+                require "file_path" and "use_direct_io" keys; GUSLI requires a
+                "gusli_config_path" key naming the GUSLI client config file.
             pool_size: Number of storage descriptor slots to pre-allocate.
             l1_memory_desc: Descriptor of the L1 memory buffer to register with Nixl
                 for data transfers.
@@ -203,6 +205,12 @@ class NixlStorageAgent:
         elif self.backend in ["OBJ", "AZURE_BLOB"]:
             self.pool = NixlObjPool(num_total_objs=self.pool_size)
             self.init_storage_handlers_object(
+                page_size=l1_memory_desc.align_bytes,
+                num_pages=self.pool_size,
+            )
+        elif self.backend in _BLOCK_BACKENDS:
+            self.pool = NixlObjPool(num_total_objs=self.pool_size)
+            self.init_storage_handlers_block(
                 page_size=l1_memory_desc.align_bytes,
                 num_pages=self.pool_size,
             )
@@ -326,6 +334,61 @@ class NixlStorageAgent:
         xfer_descs = self.nixl_agent.get_xfer_descs(xfer_desc, mem_type="OBJ")
         xfer_handler = self.nixl_agent.prep_xfer_dlist(
             self.agent_name, xfer_descs, mem_type="OBJ"
+        )
+
+        self.storage_reg_descs = reg_descs
+        self.storage_xfer_descs = xfer_descs
+        self.storage_xfer_handler = xfer_handler
+
+    def init_storage_handlers_block(
+        self,
+        page_size: int,
+        num_pages: int,
+    ) -> None:
+        """Initialize storage handlers for block-device backends (GUSLI).
+
+        Registers ``num_pages`` fixed-size, contiguous ``page_size`` slots on
+        the GUSLI-exposed block device. Slot ``i`` maps to device byte offset
+        ``i * page_size``; the ``NixlObjPool`` hands these slot indices to the
+        store/load path exactly as the file and object backends do, so the
+        surrounding adapter logic is backend-agnostic.
+
+        Args:
+            page_size: Granularity of an L1 memory page (transfer unit size).
+                Must be a multiple of the device's logical block size for the
+                zero-copy path; otherwise the GUSLI client rejects the I/O.
+            num_pages: Number of block slots to pre-register (== ``pool_size``).
+
+        Notes:
+            The GUSLI target device/server is selected via the
+            ``gusli_config_path`` entry in ``backend_params`` (validated in
+            ``NixlStoreL2AdapterConfig``); the NIXL agent forwards
+            ``backend_params`` to ``create_backend("GUSLI", ...)``, so no
+            path is needed here.
+
+        TODO(linux-validation): The descriptor tuple layout and ``mem_type``
+        string below are the block-device analogue of the FILE/OBJ paths, but
+        the exact contract exposed by the NIXL GUSLI plugin has not yet been
+        confirmed against a live NIXL+GUSLI install. On a Linux+NVMe host,
+        verify against ``nixl_agent.get_plugin_mem_types("GUSLI")`` /
+        ``get_plugin_params("GUSLI")`` whether GUSLI registers as:
+          (a) ``mem_type="BLK"`` with ``(offset, len, device_id)`` tuples
+              (assumed here), or
+          (b) a FILE-style ``(offset, len, fd, "")`` registration over a
+              single device handle (then reuse ``init_storage_handlers_file``
+              with one "file" == the whole device), or
+          (c) object-style keys.
+        Adjust ``mem_type`` and the tuple shapes below once confirmed.
+        """
+        _GUSLI_MEM_TYPE = "BLK"
+        # One device handle; offsets index into the single block device.
+        device_id = 0
+        reg_list = [(0, page_size * num_pages, device_id, "")]
+        xfer_desc = [(i * page_size, page_size, device_id) for i in range(num_pages)]
+        reg_descs = self.nixl_agent.register_memory(reg_list, mem_type=_GUSLI_MEM_TYPE)
+        xfer_descs = self.nixl_agent.get_xfer_descs(xfer_desc, mem_type=_GUSLI_MEM_TYPE)
+        xfer_handler = self.nixl_agent.prep_xfer_dlist(
+            self.agent_name, xfer_descs, mem_type=_GUSLI_MEM_TYPE
         )
 
         self.storage_reg_descs = reg_descs
@@ -908,8 +971,18 @@ _VALID_NIXL_BACKENDS = (
     "HF3FS",
     "OBJ",
     "AZURE_BLOB",
+    "GUSLI",
 )
 _FILE_BACKENDS = ("GDS", "GDS_MT", "POSIX", "HF3FS")
+# Userspace block-device backends. GUSLI (NVIDIA/GUSLI) exposes a local
+# block device -- typically an NVMe fronted by an SPDK-bdev GUSLI server --
+# to the NIXL agent over shared memory (zero-copy, kernel bypass). Unlike
+# the file-based backends it takes no ``file_path``; the target device is
+# selected through the GUSLI client configuration (see ``_GUSLI_*`` keys).
+_BLOCK_BACKENDS = ("GUSLI",)
+# Required ``backend_params`` key for GUSLI: path to the GUSLI client config
+# file that names the server(s)/device(s) to attach to.
+_GUSLI_CONFIG_PATH_KEY = "gusli_config_path"
 
 
 class NixlStoreL2AdapterConfig(L2AdapterConfigBase):
@@ -918,13 +991,14 @@ class NixlStoreL2AdapterConfig(L2AdapterConfigBase):
 
     Fields:
     - backend: Nixl storage backend
-      (GDS, GDS_MT, POSIX, HF3FS, OBJ, AZURE_BLOB).
+      (GDS, GDS_MT, POSIX, HF3FS, OBJ, AZURE_BLOB, GUSLI).
     - backend_params: Backend-specific parameters as a
       dict of string key-value pairs. For file-based
       backends (GDS, GDS_MT, POSIX, HF3FS), must include
-      ``file_path``. May also include ``use_direct_io``
-      (default ``"false"``) and other backend-specific
-      keys.
+      ``file_path``. For the GUSLI block-device backend,
+      must include ``gusli_config_path`` (path to the
+      GUSLI client config naming the SPDK-bdev server /
+      device).
     - pool_size: Number of storage descriptors to
       pre-allocate (must be > 0).
     """
@@ -947,6 +1021,12 @@ class NixlStoreL2AdapterConfig(L2AdapterConfigBase):
                     "backend_params must include "
                     "'use_direct_io' for file-based "
                     "backend %r" % backend
+                )
+        if backend in _BLOCK_BACKENDS:
+            if _GUSLI_CONFIG_PATH_KEY not in backend_params:
+                raise ValueError(
+                    "backend_params must include %r for "
+                    "block-device backend %r" % (_GUSLI_CONFIG_PATH_KEY, backend)
                 )
         self.backend = backend
         self.backend_params = backend_params
@@ -987,7 +1067,10 @@ class NixlStoreL2AdapterConfig(L2AdapterConfigBase):
             "'use_direct_io' (default 'false') and "
             "'file_size' (int, size in bytes of each "
             "storage file slot; defaults to the L1 "
-            "page size if not set).\n"
+            "page size if not set). The GUSLI backend "
+            "requires 'gusli_config_path' (path to the "
+            "GUSLI client config for the SPDK-bdev "
+            "device).\n"
             "- pool_size (int): number of storage "
             "descriptors to pre-allocate (required, "
             ">0)" % (_VALID_NIXL_BACKENDS,)

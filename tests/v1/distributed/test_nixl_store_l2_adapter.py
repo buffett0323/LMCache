@@ -1066,3 +1066,60 @@ class TestEvictionInterface:
         adpt.delete([key])
 
         assert listener.deleted == []
+
+
+# =============================================================================
+# GUSLI (block-device) Config Parsing Tests
+# =============================================================================
+
+
+class TestGusliConfigParsing:
+    """Validate NixlStoreL2AdapterConfig parsing for the GUSLI backend.
+
+    These tests exercise only config validation (``from_dict``) and do not
+    create a live NIXL agent, so they run without an SPDK/GUSLI device. The
+    whole module is still guarded by ``pytest.importorskip("nixl")`` above.
+    """
+
+    def test_gusli_accepts_config_path(self):
+        config = NixlStoreL2AdapterConfig.from_dict(
+            {
+                "backend": "GUSLI",
+                "backend_params": {"gusli_config_path": "/etc/gusli/client.cfg"},
+                "pool_size": 64,
+            }
+        )
+        assert config.backend == "GUSLI"
+        assert config.backend_params["gusli_config_path"] == "/etc/gusli/client.cfg"
+        assert config.pool_size == 64
+
+    def test_gusli_requires_config_path(self):
+        with pytest.raises(ValueError, match="gusli_config_path"):
+            NixlStoreL2AdapterConfig.from_dict(
+                {
+                    "backend": "GUSLI",
+                    "backend_params": {},
+                    "pool_size": 64,
+                }
+            )
+
+    def test_gusli_does_not_require_file_path(self):
+        # GUSLI is block-based, so file_path / use_direct_io are not required.
+        config = NixlStoreL2AdapterConfig.from_dict(
+            {
+                "backend": "GUSLI",
+                "backend_params": {"gusli_config_path": "/etc/gusli/client.cfg"},
+                "pool_size": 8,
+            }
+        )
+        assert "file_path" not in config.backend_params
+
+    def test_gusli_rejected_when_backend_unknown(self):
+        with pytest.raises(ValueError, match="backend must be one of"):
+            NixlStoreL2AdapterConfig.from_dict(
+                {
+                    "backend": "NOT_A_BACKEND",
+                    "backend_params": {"gusli_config_path": "/x"},
+                    "pool_size": 8,
+                }
+            )

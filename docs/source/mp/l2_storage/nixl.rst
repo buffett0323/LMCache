@@ -18,7 +18,7 @@ initialization.
 **Required fields:**
 
 - ``backend``: Storage backend -- one of ``POSIX``, ``GDS``, ``GDS_MT``,
-  ``HF3FS``, ``OBJ``, ``AZURE_BLOB``.
+  ``HF3FS``, ``OBJ``, ``AZURE_BLOB``, ``GUSLI``.
 - ``pool_size``: Number of storage descriptors to pre-allocate (must be > 0).
 
 **Backend-specific parameters (``backend_params``):**
@@ -29,6 +29,11 @@ File-based backends (``GDS``, ``GDS_MT``, ``POSIX``, ``HF3FS``) require:
 - ``use_direct_io``: ``"true"`` or ``"false"`` -- whether to use direct I/O.
 
 The ``OBJ`` and ``AZURE_BLOB`` backends (object stores) do not require ``file_path``.
+
+The ``GUSLI`` backend (userspace block device) requires:
+
+- ``gusli_config_path``: Path to the GUSLI client config file that names the
+  GUSLI server(s)/device(s) to attach to (typically an SPDK-bdev NVMe).
 
 **Backend descriptions:**
 
@@ -51,6 +56,11 @@ The ``OBJ`` and ``AZURE_BLOB`` backends (object stores) do not require ``file_pa
      - Object store backend.  No local file path required.
    * - ``AZURE_BLOB``
      - Object store backend for Azure Blob Storage.  No local file path required.
+   * - ``GUSLI``
+     - Userspace block-device backend (NVIDIA/GUSLI).  A GUSLI client attaches
+       over shared memory to a GUSLI server exposing a local block device --
+       typically an NVMe fronted by an **SPDK-bdev** server -- for zero-copy,
+       kernel-bypass I/O.  Selected via ``gusli_config_path``; no ``file_path``.
 
 **Configuration examples:**
 
@@ -73,6 +83,9 @@ The ``OBJ`` and ``AZURE_BLOB`` backends (object stores) do not require ``file_pa
 
     # AZURE_BLOB backend
     --l2-adapter '{"type": "nixl_store", "backend": "AZURE_BLOB", "backend_params": {"account_url": "https://<account_name>.blob.core.windows.net", "container_name": "<container_name>"}, "pool_size": 32}'
+
+    # GUSLI backend (SPDK-bdev NVMe via userspace block device)
+    --l2-adapter '{"type": "nixl_store", "backend": "GUSLI", "backend_params": {"gusli_config_path": "/etc/gusli/client.cfg"}, "pool_size": 64}'
 
 Dynamic (persist / recover) — ``nixl_store_dynamic``
 ----------------------------------------------------
