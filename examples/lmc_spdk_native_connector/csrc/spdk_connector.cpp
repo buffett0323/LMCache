@@ -228,17 +228,20 @@ WorkerSpdkConn SpdkNvmeConnector::create_connection() {
   if (conn.qpair == nullptr) {
     throw std::runtime_error("SpdkNvmeConnector: failed to allocate I/O qpair");
   }
-  // One DMA-capable bounce buffer per worker, sized to a full slot and
-  // aligned to the sector size (SPDK requires DMA-able, aligned memory).
-  conn.dma_buf = spdk_zmalloc(nvme_->slot_size_bytes, nvme_->sector_size,
-                              nullptr, SPDK_ENV_SOCKET_ID_ANY,
-                              SPDK_MALLOC_DMA);
+  // One DMA-capable bounce buffer per worker, sized for kMaxInFlightPerWorker
+  // concurrent slots (do_batch_get/do_batch_set pipeline that many
+  // outstanding commands on this qpair, each using its own slot-sized
+  // slice) and aligned to the sector size (SPDK requires DMA-able, aligned
+  // memory).
+  size_t buf_size = kMaxInFlightPerWorker * nvme_->slot_size_bytes;
+  conn.dma_buf = spdk_zmalloc(buf_size, nvme_->sector_size, nullptr,
+                              SPDK_ENV_SOCKET_ID_ANY, SPDK_MALLOC_DMA);
   if (conn.dma_buf == nullptr) {
     spdk_nvme_ctrlr_free_io_qpair(conn.qpair);
     conn.qpair = nullptr;
     throw std::runtime_error("SpdkNvmeConnector: spdk_zmalloc failed");
   }
-  conn.dma_buf_size = nvme_->slot_size_bytes;
+  conn.dma_buf_size = buf_size;
   return conn;
 }
 
@@ -334,6 +337,165 @@ bool SpdkNvmeConnector::do_single_exists(WorkerSpdkConn& conn,
 bool SpdkNvmeConnector::do_single_delete(WorkerSpdkConn& conn,
                                          const std::string& key) {
   return conn.index->erase(key);
+}
+
+size_t SpdkNvmeConnector::choose_num_tiles(lmcache::connector::Op op,
+                                           size_t num_items) const {
+  using lmcache::connector::Op;
+  if (op == Op::BATCH_TILE_GET || op == Op::BATCH_TILE_SET) {
+    // Route the whole batch to a single worker instead of splitting it into
+    // up to num_workers tiles. do_batch_get/do_batch_set below pipeline the
+    // full batch's NVMe commands on that one worker's qpair, so depth comes
+    // from pipelining rather than from fanning out across workers; workers
+    // still run in parallel across *different* concurrent submits. This
+    // trades tile-level fan-out for far fewer enqueue/dequeue operations on
+    // ConnectorBase's shared dispatch queue, which profiling showed was
+    // heavily contended (see the class-level comment on the declaration).
+    return 1;
+  }
+  return lmcache::connector::ConnectorBase<WorkerSpdkConn>::choose_num_tiles(
+      op, num_items);
+}
+
+void SpdkNvmeConnector::do_batch_set(WorkerSpdkConn& conn,
+                                     const lmcache::connector::Request& req) {
+  const size_t n = req.keys.size();
+  size_t i = 0;
+  while (i < n) {
+    size_t wave = std::min(n - i, kMaxInFlightPerWorker);
+    std::vector<IoCtx> ctxs(wave);
+
+    // Stage 1: copy each item into its own buffer slice and submit all
+    // writes for this wave before waiting on any of them.
+    for (size_t j = 0; j < wave; ++j) {
+      size_t idx = i + j;
+      const std::string& key = req.keys[idx];
+      const void* buf = req.buf_ptrs[idx];
+      size_t len = req.buf_lens[idx];
+      if (len > conn.nvme->slot_size_bytes) {
+        throw std::runtime_error(
+            "SpdkNvmeConnector: value length " + std::to_string(len) +
+            " exceeds slot_size_bytes " +
+            std::to_string(conn.nvme->slot_size_bytes));
+      }
+      uint64_t slot = conn.index->allocate(key, len);
+      uint64_t lba = slot * conn.nvme->blocks_per_slot;
+      uint32_t lba_count = static_cast<uint32_t>(
+          (len + conn.nvme->sector_size - 1) / conn.nvme->sector_size);
+
+      void* slice =
+          static_cast<char*>(conn.dma_buf) + j * conn.nvme->slot_size_bytes;
+      std::memcpy(slice, buf, len);
+      size_t io_bytes = static_cast<size_t>(lba_count) * conn.nvme->sector_size;
+      if (io_bytes > len) {
+        std::memset(static_cast<char*>(slice) + len, 0, io_bytes - len);
+      }
+
+      int rc = spdk_nvme_ns_cmd_write(conn.nvme->ns, conn.qpair, slice, lba,
+                                      lba_count, io_complete_cb, &ctxs[j], 0);
+      if (rc != 0) {
+        throw std::runtime_error(
+            "SpdkNvmeConnector: failed to submit NVMe write");
+      }
+    }
+
+    // Stage 2: poll this worker's qpair until every command in the wave
+    // has completed. Unlike blocking_io, this drains up to `wave`
+    // completions per submit round instead of exactly one.
+    size_t done = 0;
+    while (done < wave) {
+      spdk_nvme_qpair_process_completions(conn.qpair, 0);
+      done = 0;
+      for (const auto& c : ctxs) {
+        if (c.done) ++done;
+      }
+    }
+    for (const auto& c : ctxs) {
+      if (!c.success) {
+        throw std::runtime_error(
+            "SpdkNvmeConnector: NVMe write completed with error");
+      }
+    }
+
+    i += wave;
+  }
+}
+
+void SpdkNvmeConnector::do_batch_get(WorkerSpdkConn& conn,
+                                     const lmcache::connector::Request& req) {
+  const size_t n = req.keys.size();
+  size_t i = 0;
+  while (i < n) {
+    size_t wave = std::min(n - i, kMaxInFlightPerWorker);
+    std::vector<IoCtx> ctxs(wave);
+    std::vector<bool> submitted(wave, false);
+
+    // Stage 1: look up each key and submit its read. Lookup/submit
+    // failures are per-key (matches ConnectorBase's default do_batch_get
+    // error-tolerance contract) -- record them in per_key_results and mark
+    // the slot pre-"done" so stage 2 doesn't wait on it.
+    for (size_t j = 0; j < wave; ++j) {
+      size_t idx = i + j;
+      const std::string& key = req.keys[idx];
+      size_t len = req.buf_lens[idx];
+
+      SlotMeta meta;
+      bool ok = conn.index->lookup(key, meta) && meta.length == len;
+      if (!ok) {
+        req.batch->per_key_results[req.start_idx + idx] = 0;
+        fprintf(stderr,
+                "[LMCache GET] key %s failed: not found or size mismatch\n",
+                key.c_str());
+        ctxs[j].done = true;
+        continue;
+      }
+
+      uint64_t lba = meta.slot_idx * conn.nvme->blocks_per_slot;
+      uint32_t lba_count = static_cast<uint32_t>(
+          (len + conn.nvme->sector_size - 1) / conn.nvme->sector_size);
+      void* slice =
+          static_cast<char*>(conn.dma_buf) + j * conn.nvme->slot_size_bytes;
+
+      int rc = spdk_nvme_ns_cmd_read(conn.nvme->ns, conn.qpair, slice, lba,
+                                     lba_count, io_complete_cb, &ctxs[j], 0);
+      if (rc != 0) {
+        req.batch->per_key_results[req.start_idx + idx] = 0;
+        fprintf(stderr, "[LMCache GET] key %s failed: submit error\n",
+                key.c_str());
+        ctxs[j].done = true;
+        continue;
+      }
+      submitted[j] = true;
+    }
+
+    // Stage 2: poll until every submitted command in the wave completes.
+    size_t done = 0;
+    while (done < wave) {
+      spdk_nvme_qpair_process_completions(conn.qpair, 0);
+      done = 0;
+      for (const auto& c : ctxs) {
+        if (c.done) ++done;
+      }
+    }
+
+    // Stage 3: copy each successfully-read slice into its output buffer.
+    for (size_t j = 0; j < wave; ++j) {
+      if (!submitted[j]) continue;  // already recorded as failed in stage 1
+      size_t idx = i + j;
+      if (!ctxs[j].success) {
+        req.batch->per_key_results[req.start_idx + idx] = 0;
+        fprintf(stderr, "[LMCache GET] key %s failed: read error\n",
+                req.keys[idx].c_str());
+        continue;
+      }
+      void* slice =
+          static_cast<char*>(conn.dma_buf) + j * conn.nvme->slot_size_bytes;
+      std::memcpy(req.buf_ptrs[idx], slice, req.buf_lens[idx]);
+      req.batch->per_key_results[req.start_idx + idx] = 1;
+    }
+
+    i += wave;
+  }
 }
 
 }  // namespace lmc_spdk

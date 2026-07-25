@@ -81,6 +81,9 @@ struct WorkerSpdkConn {
   std::shared_ptr<SharedNvme> nvme;
   std::shared_ptr<SharedIndex> index;
   struct spdk_nvme_qpair* qpair = nullptr;
+  // Sized for kMaxInFlightPerWorker concurrent slots (see below), not just
+  // one -- do_batch_get/do_batch_set pipeline up to that many outstanding
+  // NVMe commands on this qpair at once, each using its own slice.
   void* dma_buf = nullptr;
   size_t dma_buf_size = 0;
 
@@ -124,11 +127,44 @@ class SpdkNvmeConnector : public lmcache::connector::ConnectorBase<WorkerSpdkCon
   bool do_single_exists(WorkerSpdkConn& conn, const std::string& key) override;
   bool do_single_delete(WorkerSpdkConn& conn, const std::string& key) override;
 
+  // Pipelined batch overrides. The default ConnectorBase::do_batch_get/set
+  // call do_single_get/set in a loop, which -- via blocking_io below --
+  // submits exactly one NVMe command and busy-polls to completion before
+  // the next can be submitted, so a worker's qpair never has more than one
+  // command outstanding regardless of benchmark queue depth. These
+  // overrides instead submit up to kMaxInFlightPerWorker commands to the
+  // qpair before polling for any completions, so a single worker thread
+  // can actually reach real hardware queue depth. Combined with
+  // choose_num_tiles() below (routes a whole batch to one worker instead
+  // of splitting it across up to num_workers tiles), this also cuts how
+  // often workers contend on ConnectorBase's shared dispatch queue/mutex --
+  // see the issue #4113 benchmark writeup for the profiling evidence
+  // (futex dominated wall time; do_single_get -> blocking_io's busy-spin
+  // dominated on-CPU samples) that motivated both changes.
+  void do_batch_get(WorkerSpdkConn& conn,
+                    const lmcache::connector::Request& req) override;
+  void do_batch_set(WorkerSpdkConn& conn,
+                    const lmcache::connector::Request& req) override;
+  size_t choose_num_tiles(lmcache::connector::Op op,
+                          size_t num_items) const override;
+
  private:
   // Blocking single-slot I/O: submits one NVMe read/write and polls the
-  // qpair until completion. Throws std::runtime_error on failure.
+  // qpair until completion. Throws std::runtime_error on failure. Used by
+  // do_single_get/do_single_set (still required to implement the
+  // ConnectorBase interface, and used by do_batch_exists/do_batch_delete's
+  // default per-key loop) but no longer by the batch get/set path above.
   void blocking_io(WorkerSpdkConn& conn, bool is_write, uint64_t lba,
                    uint32_t lba_count);
+
+  // Upper bound on NVMe commands a single worker pipelines concurrently on
+  // its own qpair within one do_batch_get/do_batch_set call. Also sizes
+  // each worker's DMA bounce buffer (kMaxInFlightPerWorker slots). Chosen
+  // to comfortably fit the SPDK qpair's default queue depth and this
+  // connector's typical benchmark batch sizes without an unbounded
+  // hugepage-memory footprint (kMaxInFlightPerWorker * slot_size_bytes *
+  // num_workers bytes of DMA memory, e.g. 32 * 1MiB * 8 = 256MiB).
+  static constexpr size_t kMaxInFlightPerWorker = 32;
 
   std::string pci_addr_;
   uint32_t nsid_;

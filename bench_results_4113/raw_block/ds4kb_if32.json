@@ -1,0 +1,70 @@
+{
+  "title": "L2 Adapter Benchmark Result",
+  "metrics": {
+    "config": {
+      "l2_adapter_json": "{\"type\":\"raw_block\",\"device_path\":\"/dev/nvme1n1\",\"slot_bytes\":1048576,\"io_engine\":\"io_uring\"}",
+      "num_keys": 32,
+      "in_flight": 32,
+      "keys_per_round": 1024,
+      "data_size_kb": 4,
+      "data_per_round_mb": 4.0,
+      "measurement_rounds": 5,
+      "warmup_rounds": 2,
+      "lookup_max_hit_rate": 0.0
+    },
+    "op_0": {
+      "operation": "Store",
+      "rounds": 5,
+      "keys_per_round": 1024,
+      "total_keys": 5120,
+      "total_success": 5120,
+      "duration_avg_ms": 61.65,
+      "duration_min_ms": 58.18,
+      "duration_max_ms": 64.02,
+      "duration_p50_ms": 62.66,
+      "duration_p99_ms": 64.02,
+      "duration_std_ms": 2.43,
+      "throughput_avg_mbps": 64.97,
+      "throughput_min_mbps": 62.48,
+      "throughput_max_mbps": 68.75,
+      "ops_per_sec_avg": 16632.31,
+      "latency_per_key_ms": 0.06
+    },
+    "op_1": {
+      "operation": "Lookup",
+      "rounds": 5,
+      "keys_per_round": 1024,
+      "total_keys": 5120,
+      "total_success": 0,
+      "duration_avg_ms": 3.43,
+      "duration_min_ms": 3.39,
+      "duration_max_ms": 3.5,
+      "duration_p50_ms": 3.42,
+      "duration_p99_ms": 3.5,
+      "duration_std_ms": 0.04,
+      "throughput_avg_mbps": 0.0,
+      "throughput_min_mbps": 0.0,
+      "throughput_max_mbps": 0.0,
+      "ops_per_sec_avg": 298237.11,
+      "latency_per_key_ms": 0.003
+    },
+    "op_2": {
+      "operation": "Load",
+      "rounds": 5,
+      "keys_per_round": 1024,
+      "total_keys": 5120,
+      "total_success": 5120,
+      "duration_avg_ms": 53.87,
+      "duration_min_ms": 52.98,
+      "duration_max_ms": 54.72,
+      "duration_p50_ms": 53.89,
+      "duration_p99_ms": 54.72,
+      "duration_std_ms": 0.7,
+      "throughput_avg_mbps": 74.26,
+      "throughput_min_mbps": 73.1,
+      "throughput_max_mbps": 75.5,
+      "ops_per_sec_avg": 19010.36,
+      "latency_per_key_ms": 0.053
+    }
+  }
+}

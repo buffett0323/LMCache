@@ -1,0 +1,70 @@
+{
+  "title": "L2 Adapter Benchmark Result",
+  "metrics": {
+    "config": {
+      "l2_adapter_json": "{\"type\":\"raw_block\",\"device_path\":\"/dev/nvme1n1\",\"slot_bytes\":1048576,\"io_engine\":\"io_uring\"}",
+      "num_keys": 32,
+      "in_flight": 64,
+      "keys_per_round": 2048,
+      "data_size_kb": 32,
+      "data_per_round_mb": 64.0,
+      "measurement_rounds": 5,
+      "warmup_rounds": 2,
+      "lookup_max_hit_rate": 0.0
+    },
+    "op_0": {
+      "operation": "Store",
+      "rounds": 5,
+      "keys_per_round": 2048,
+      "total_keys": 10240,
+      "total_success": 10240,
+      "duration_avg_ms": 7.6,
+      "duration_min_ms": 7.42,
+      "duration_max_ms": 7.83,
+      "duration_p50_ms": 7.51,
+      "duration_p99_ms": 7.83,
+      "duration_std_ms": 0.19,
+      "throughput_avg_mbps": 8426.23,
+      "throughput_min_mbps": 8175.27,
+      "throughput_max_mbps": 8627.43,
+      "ops_per_sec_avg": 269639.43,
+      "latency_per_key_ms": 0.004
+    },
+    "op_1": {
+      "operation": "Lookup",
+      "rounds": 5,
+      "keys_per_round": 2048,
+      "total_keys": 10240,
+      "total_success": 0,
+      "duration_avg_ms": 6.86,
+      "duration_min_ms": 6.83,
+      "duration_max_ms": 6.93,
+      "duration_p50_ms": 6.85,
+      "duration_p99_ms": 6.93,
+      "duration_std_ms": 0.04,
+      "throughput_avg_mbps": 0.0,
+      "throughput_min_mbps": 0.0,
+      "throughput_max_mbps": 0.0,
+      "ops_per_sec_avg": 298417.35,
+      "latency_per_key_ms": 0.003
+    },
+    "op_2": {
+      "operation": "Load",
+      "rounds": 5,
+      "keys_per_round": 2048,
+      "total_keys": 10240,
+      "total_success": 10240,
+      "duration_avg_ms": 106.35,
+      "duration_min_ms": 105.2,
+      "duration_max_ms": 108.11,
+      "duration_p50_ms": 105.73,
+      "duration_p99_ms": 108.11,
+      "duration_std_ms": 1.3,
+      "throughput_avg_mbps": 601.86,
+      "throughput_min_mbps": 591.97,
+      "throughput_max_mbps": 608.35,
+      "ops_per_sec_avg": 19259.59,
+      "latency_per_key_ms": 0.052
+    }
+  }
+}

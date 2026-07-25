@@ -1,0 +1,70 @@
+{
+  "title": "L2 Adapter Benchmark Result",
+  "metrics": {
+    "config": {
+      "l2_adapter_json": "{\"type\":\"fs_native\",\"base_path\":\"/mnt/nvme_bench/fs_native_ds4kb\",\"num_workers\":8,\"use_odirect\":true}",
+      "num_keys": 32,
+      "in_flight": 1,
+      "keys_per_round": 32,
+      "data_size_kb": 4,
+      "data_per_round_mb": 0.12,
+      "measurement_rounds": 5,
+      "warmup_rounds": 2,
+      "lookup_max_hit_rate": 0.0
+    },
+    "op_0": {
+      "operation": "Store",
+      "rounds": 5,
+      "keys_per_round": 32,
+      "total_keys": 160,
+      "total_success": 160,
+      "duration_avg_ms": 4.89,
+      "duration_min_ms": 1.82,
+      "duration_max_ms": 11.84,
+      "duration_p50_ms": 3.59,
+      "duration_p99_ms": 11.84,
+      "duration_std_ms": 3.99,
+      "throughput_avg_mbps": 37.23,
+      "throughput_min_mbps": 10.56,
+      "throughput_max_mbps": 68.85,
+      "ops_per_sec_avg": 9529.8,
+      "latency_per_key_ms": 0.153
+    },
+    "op_1": {
+      "operation": "Lookup",
+      "rounds": 5,
+      "keys_per_round": 32,
+      "total_keys": 160,
+      "total_success": 0,
+      "duration_avg_ms": 0.26,
+      "duration_min_ms": 0.24,
+      "duration_max_ms": 0.28,
+      "duration_p50_ms": 0.26,
+      "duration_p99_ms": 0.28,
+      "duration_std_ms": 0.02,
+      "throughput_avg_mbps": 0.0,
+      "throughput_min_mbps": 0.0,
+      "throughput_max_mbps": 0.0,
+      "ops_per_sec_avg": 124742.24,
+      "latency_per_key_ms": 0.008
+    },
+    "op_2": {
+      "operation": "Load",
+      "rounds": 5,
+      "keys_per_round": 32,
+      "total_keys": 160,
+      "total_success": 160,
+      "duration_avg_ms": 1.49,
+      "duration_min_ms": 0.62,
+      "duration_max_ms": 2.81,
+      "duration_p50_ms": 0.73,
+      "duration_p99_ms": 2.81,
+      "duration_std_ms": 1.13,
+      "throughput_avg_mbps": 131.18,
+      "throughput_min_mbps": 44.47,
+      "throughput_max_mbps": 200.09,
+      "ops_per_sec_avg": 33582.58,
+      "latency_per_key_ms": 0.047
+    }
+  }
+}

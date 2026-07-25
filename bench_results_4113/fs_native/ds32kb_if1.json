@@ -1,0 +1,70 @@
+{
+  "title": "L2 Adapter Benchmark Result",
+  "metrics": {
+    "config": {
+      "l2_adapter_json": "{\"type\":\"fs_native\",\"base_path\":\"/mnt/nvme_bench/fs_native_ds32kb\",\"num_workers\":8,\"use_odirect\":true}",
+      "num_keys": 32,
+      "in_flight": 1,
+      "keys_per_round": 32,
+      "data_size_kb": 32,
+      "data_per_round_mb": 1.0,
+      "measurement_rounds": 5,
+      "warmup_rounds": 2,
+      "lookup_max_hit_rate": 0.0
+    },
+    "op_0": {
+      "operation": "Store",
+      "rounds": 5,
+      "keys_per_round": 32,
+      "total_keys": 160,
+      "total_success": 160,
+      "duration_avg_ms": 3.61,
+      "duration_min_ms": 1.73,
+      "duration_max_ms": 6.59,
+      "duration_p50_ms": 1.8,
+      "duration_p99_ms": 6.59,
+      "duration_std_ms": 2.54,
+      "throughput_avg_mbps": 403.9,
+      "throughput_min_mbps": 151.69,
+      "throughput_max_mbps": 579.52,
+      "ops_per_sec_avg": 12924.82,
+      "latency_per_key_ms": 0.113
+    },
+    "op_1": {
+      "operation": "Lookup",
+      "rounds": 5,
+      "keys_per_round": 32,
+      "total_keys": 160,
+      "total_success": 0,
+      "duration_avg_ms": 0.58,
+      "duration_min_ms": 0.2,
+      "duration_max_ms": 1.92,
+      "duration_p50_ms": 0.25,
+      "duration_p99_ms": 1.92,
+      "duration_std_ms": 0.75,
+      "throughput_avg_mbps": 0.0,
+      "throughput_min_mbps": 0.0,
+      "throughput_max_mbps": 0.0,
+      "ops_per_sec_avg": 109089.11,
+      "latency_per_key_ms": 0.018
+    },
+    "op_2": {
+      "operation": "Load",
+      "rounds": 5,
+      "keys_per_round": 32,
+      "total_keys": 160,
+      "total_success": 160,
+      "duration_avg_ms": 1.64,
+      "duration_min_ms": 1.51,
+      "duration_max_ms": 1.87,
+      "duration_p50_ms": 1.63,
+      "duration_p99_ms": 1.87,
+      "duration_std_ms": 0.15,
+      "throughput_avg_mbps": 612.16,
+      "throughput_min_mbps": 534.68,
+      "throughput_max_mbps": 663.5,
+      "ops_per_sec_avg": 19589.05,
+      "latency_per_key_ms": 0.051
+    }
+  }
+}

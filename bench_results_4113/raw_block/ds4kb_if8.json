@@ -1,0 +1,70 @@
+{
+  "title": "L2 Adapter Benchmark Result",
+  "metrics": {
+    "config": {
+      "l2_adapter_json": "{\"type\":\"raw_block\",\"device_path\":\"/dev/nvme1n1\",\"slot_bytes\":1048576,\"io_engine\":\"io_uring\"}",
+      "num_keys": 32,
+      "in_flight": 8,
+      "keys_per_round": 256,
+      "data_size_kb": 4,
+      "data_per_round_mb": 1.0,
+      "measurement_rounds": 5,
+      "warmup_rounds": 2,
+      "lookup_max_hit_rate": 0.0
+    },
+    "op_0": {
+      "operation": "Store",
+      "rounds": 5,
+      "keys_per_round": 256,
+      "total_keys": 1280,
+      "total_success": 1280,
+      "duration_avg_ms": 15.75,
+      "duration_min_ms": 15.56,
+      "duration_max_ms": 16.16,
+      "duration_p50_ms": 15.63,
+      "duration_p99_ms": 16.16,
+      "duration_std_ms": 0.25,
+      "throughput_avg_mbps": 63.5,
+      "throughput_min_mbps": 61.87,
+      "throughput_max_mbps": 64.27,
+      "ops_per_sec_avg": 16255.65,
+      "latency_per_key_ms": 0.062
+    },
+    "op_1": {
+      "operation": "Lookup",
+      "rounds": 5,
+      "keys_per_round": 256,
+      "total_keys": 1280,
+      "total_success": 0,
+      "duration_avg_ms": 0.97,
+      "duration_min_ms": 0.95,
+      "duration_max_ms": 1.0,
+      "duration_p50_ms": 0.97,
+      "duration_p99_ms": 1.0,
+      "duration_std_ms": 0.02,
+      "throughput_avg_mbps": 0.0,
+      "throughput_min_mbps": 0.0,
+      "throughput_max_mbps": 0.0,
+      "ops_per_sec_avg": 264101.63,
+      "latency_per_key_ms": 0.004
+    },
+    "op_2": {
+      "operation": "Load",
+      "rounds": 5,
+      "keys_per_round": 256,
+      "total_keys": 1280,
+      "total_success": 1280,
+      "duration_avg_ms": 16.62,
+      "duration_min_ms": 13.7,
+      "duration_max_ms": 19.89,
+      "duration_p50_ms": 17.46,
+      "duration_p99_ms": 19.89,
+      "duration_std_ms": 2.55,
+      "throughput_avg_mbps": 61.32,
+      "throughput_min_mbps": 50.27,
+      "throughput_max_mbps": 72.99,
+      "ops_per_sec_avg": 15699.16,
+      "latency_per_key_ms": 0.065
+    }
+  }
+}

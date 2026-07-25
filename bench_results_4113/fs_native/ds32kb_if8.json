@@ -1,0 +1,70 @@
+{
+  "title": "L2 Adapter Benchmark Result",
+  "metrics": {
+    "config": {
+      "l2_adapter_json": "{\"type\":\"fs_native\",\"base_path\":\"/mnt/nvme_bench/fs_native_ds32kb\",\"num_workers\":8,\"use_odirect\":true}",
+      "num_keys": 32,
+      "in_flight": 8,
+      "keys_per_round": 256,
+      "data_size_kb": 32,
+      "data_per_round_mb": 8.0,
+      "measurement_rounds": 5,
+      "warmup_rounds": 2,
+      "lookup_max_hit_rate": 0.0
+    },
+    "op_0": {
+      "operation": "Store",
+      "rounds": 5,
+      "keys_per_round": 256,
+      "total_keys": 1280,
+      "total_success": 1280,
+      "duration_avg_ms": 21.43,
+      "duration_min_ms": 16.83,
+      "duration_max_ms": 25.0,
+      "duration_p50_ms": 21.73,
+      "duration_p99_ms": 25.0,
+      "duration_std_ms": 3.13,
+      "throughput_avg_mbps": 380.21,
+      "throughput_min_mbps": 320.03,
+      "throughput_max_mbps": 475.45,
+      "ops_per_sec_avg": 12166.78,
+      "latency_per_key_ms": 0.084
+    },
+    "op_1": {
+      "operation": "Lookup",
+      "rounds": 5,
+      "keys_per_round": 256,
+      "total_keys": 1280,
+      "total_success": 0,
+      "duration_avg_ms": 2.62,
+      "duration_min_ms": 2.59,
+      "duration_max_ms": 2.68,
+      "duration_p50_ms": 2.61,
+      "duration_p99_ms": 2.68,
+      "duration_std_ms": 0.04,
+      "throughput_avg_mbps": 0.0,
+      "throughput_min_mbps": 0.0,
+      "throughput_max_mbps": 0.0,
+      "ops_per_sec_avg": 97866.5,
+      "latency_per_key_ms": 0.01
+    },
+    "op_2": {
+      "operation": "Load",
+      "rounds": 5,
+      "keys_per_round": 256,
+      "total_keys": 1280,
+      "total_success": 1280,
+      "duration_avg_ms": 8.42,
+      "duration_min_ms": 6.87,
+      "duration_max_ms": 9.69,
+      "duration_p50_ms": 8.38,
+      "duration_p99_ms": 9.69,
+      "duration_std_ms": 1.19,
+      "throughput_avg_mbps": 966.28,
+      "throughput_min_mbps": 825.3,
+      "throughput_max_mbps": 1163.68,
+      "ops_per_sec_avg": 30921.09,
+      "latency_per_key_ms": 0.033
+    }
+  }
+}
